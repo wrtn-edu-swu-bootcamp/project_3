@@ -1,10 +1,12 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'export',           // 정적 HTML 생성
-  trailingSlash: true,        // URL 끝에 / 추가 (중요!)
+  // Vercel 배포를 위해 output: 'export' 제거
+  // Vercel은 자동으로 정적 생성 및 최적화를 수행합니다
+  trailingSlash: true,        // URL 끝에 / 추가
   images: {
-    unoptimized: true         // Static Export 제약
+    // Vercel에서는 이미지 최적화가 자동으로 지원됩니다
+    unoptimized: false
   }
 };
 

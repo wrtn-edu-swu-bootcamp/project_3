@@ -15,10 +15,10 @@ export default function DemoPage() {
   // Server Component에서 빌드 타임에 리포트 로드
   const reports = loadAllReports();
 
-  // 긴급 알림이 있는 가게 수
-  const urgentStoreCount = reports.filter(
+  // 긴급 알림이 있는 가게만 필터링
+  const urgentReports = reports.filter(
     report => report.priorities.urgent.length > 0
-  ).length;
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50/30 via-gray-50/50 to-white">
@@ -26,7 +26,7 @@ export default function DemoPage() {
       <MainHeader />
 
       {/* 메인 컨텐츠 */}
-      <main className="container mx-auto px-4 pt-24 pb-8 max-w-5xl">
+      <main className="container mx-auto px-4 pt-24 pb-16 max-w-5xl">
         {/* 히어로 섹션 */}
         <section className="pt-8 mb-12 text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
@@ -44,9 +44,9 @@ export default function DemoPage() {
         </section>
 
         {/* 긴급 알림 카드 */}
-        {urgentStoreCount > 0 && (
+        {urgentReports.length > 0 && (
           <section className="mb-8">
-            <TossUrgentAlert storeCount={urgentStoreCount} />
+            <TossUrgentAlert urgentReports={urgentReports} />
           </section>
         )}
 

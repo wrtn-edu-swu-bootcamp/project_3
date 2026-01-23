@@ -2,15 +2,24 @@
 'use client';
 
 import Link from 'next/link';
+import type { WeeklyReport } from '@/lib/types/report';
 
 interface TossUrgentAlertProps {
-  storeCount?: number;
+  urgentReports: WeeklyReport[];
 }
 
-export function TossUrgentAlert({ storeCount = 3 }: TossUrgentAlertProps) {
+export function TossUrgentAlert({ urgentReports }: TossUrgentAlertProps) {
+  if (urgentReports.length === 0) return null;
+
+  const firstReport = urgentReports[0];
+  const firstIssue = firstReport.priorities.urgent[0];
+  const storeName = firstReport.storeName;
+  const storeId = firstReport.storeId;
+  const otherCount = urgentReports.length - 1;
+
   return (
     <Link
-      href="/report/store-1/"
+      href={`/report/${storeId}/`}
       className="block bg-red-50 border-2 border-red-200 rounded-2xl p-5 hover:bg-red-100 hover:border-red-300 transition-all group"
     >
       <div className="flex items-center justify-between">
@@ -20,11 +29,11 @@ export function TossUrgentAlert({ storeCount = 3 }: TossUrgentAlertProps) {
               긴급
             </span>
             <h3 className="text-lg font-bold text-red-900">
-              포장 파손 불만이 늘었어요
+              {firstIssue?.issue || '긴급 확인 필요'}
             </h3>
           </div>
           <p className="text-sm text-red-700">
-            달떡볶이 공릉점 외 {storeCount - 1}곳
+            {storeName}{otherCount > 0 ? ` 외 ${otherCount}곳` : ''}
           </p>
         </div>
         <div className="flex items-center gap-1 text-red-600 font-bold group-hover:gap-2 transition-all">

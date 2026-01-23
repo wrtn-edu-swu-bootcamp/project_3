@@ -37,7 +37,7 @@ npm start
 ### Screen 0: 내 가게 등록 (`/`)
 - 배민 링크 입력
 - 유효성 검사 (빈 값, URL 형식, 배민 링크)
-- API로 가게명 추출 또는 직접 입력
+- 가게명 직접 입력
 - "샘플로 먼저 보기" → Screen 1
 
 ### Screen 1: 데모 랜딩 (`/demo`)
@@ -60,33 +60,6 @@ npm start
 - 진행률 표시 (aria-live)
 - 라디오 버튼 (44px 터치 영역)
 - [다음] / [제출] 버튼
-
----
-
-## 🔌 API
-
-### POST `/api/resolve-store`
-
-배민 링크에서 가게명 추출
-
-**Request:**
-```json
-{
-  "url": "https://baemin.com/..."
-}
-```
-
-**Response:**
-```json
-{
-  "storeName": "A치킨" // 또는 null
-}
-```
-
-**처리 로직:**
-1. fetch로 HTML 가져오기
-2. og:title / title 태그 파싱
-3. 실패 시 storeName=null 반환 → 프론트에서 직접 입력
 
 ---
 
@@ -153,8 +126,7 @@ npm start
 
 ## 📝 TODO (향후 개선)
 
-- [ ] 실제 배민 크롤링 API 구축 (현재는 간단한 HTML 파싱)
-- [ ] 가게명 직접 입력 UI를 인라인 or 모달로 개선
+- [ ] 가게명 입력 UI 개선 (인라인 또는 모달)
 - [ ] 리포트 데이터 백엔드 연동 (현재 하드코딩)
 - [ ] 설문 결과 저장 (현재 alert만)
 - [ ] 피드백 버튼 클릭 시 서버 전송

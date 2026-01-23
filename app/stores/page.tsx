@@ -15,9 +15,9 @@ export default function StoresPage() {
       <MainHeader />
 
       {/* 메인 컨텐츠 */}
-      <main className="container mx-auto px-4 pt-24 pb-12 max-w-5xl">
+      <main className="container mx-auto px-4 pt-32 pb-16 max-w-5xl">
         {/* 페이지 타이틀 */}
-        <div className="mb-8">
+        <div className="mb-10">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
             저장된 가게
           </h1>

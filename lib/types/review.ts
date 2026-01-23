@@ -7,11 +7,12 @@ export interface RawReview {
   date: string;         // 작성 날짜
 }
 
-/** 카테고리 (5가지 고정) */
+/** 카테고리 (6가지 고정) */
 export type Category = 
   | 'food'        // 음식 품질
   | 'delivery'    // 배달·서비스
   | 'packaging'   // 포장
+  | 'hygiene'     // 위생
   | 'price'       // 가격
   | 'etc';        // 기타
 

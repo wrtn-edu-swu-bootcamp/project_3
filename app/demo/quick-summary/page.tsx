@@ -18,7 +18,7 @@ export default function QuickSummaryPage() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-blue-50/30 via-gray-50/50 to-white">
         <MainHeader />
-        <main className="container mx-auto px-4 pt-24 pb-8 max-w-4xl">
+        <main className="container mx-auto px-4 pt-24 pb-16 max-w-4xl">
           <EmptyState type="static" />
           <div className="text-center mt-8">
             <Link 
@@ -40,7 +40,7 @@ export default function QuickSummaryPage() {
     <div className="min-h-screen bg-gradient-to-b from-blue-50/30 via-gray-50/50 to-white">
       <MainHeader />
 
-      <main className="container mx-auto px-4 pt-24 pb-12 max-w-4xl">
+      <main className="container mx-auto px-4 pt-24 pb-16 max-w-4xl">
         {/* 타이틀 */}
         <div className="text-center mb-12">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">

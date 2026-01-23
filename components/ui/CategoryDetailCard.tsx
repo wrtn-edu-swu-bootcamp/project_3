@@ -67,15 +67,27 @@ export function CategoryDetailCard({
         </div>
       )}
 
-      {/* 부정 예시 */}
+      {/* 리뷰 예시 (긍정/부정 동적 표시) */}
       {negativeExamples.length > 0 && (
         <div className="pt-3 border-t border-gray-100">
-          <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
-            <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495z" clipRule="evenodd" />
-            </svg>
-            부정 리뷰 예시
-          </p>
+          {(() => {
+            const isPositiveDominant = positivePercent > negativePercent;
+            const iconColor = isPositiveDominant ? 'text-green-400' : 'text-red-400';
+            const label = isPositiveDominant ? '긍정 리뷰 예시' : '부정 리뷰 예시';
+            const iconPath = isPositiveDominant 
+              ? 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' // 체크 아이콘
+              : 'M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495z'; // 경고 아이콘
+            
+            return (
+              <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
+                <svg className={`w-4 h-4 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={iconPath} />
+                </svg>
+                {label}
+              </p>
+            );
+          })()}
+
           <div className="space-y-2">
             {negativeExamples.slice(0, 2).map((example, idx) => (
               <p 

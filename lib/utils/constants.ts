@@ -49,6 +49,7 @@ export const CATEGORY_DISPLAY: Record<Category, string> = {
   food: '🍴 음식 품질',
   delivery: '🚗 배달·서비스',
   packaging: '📦 포장',
+  hygiene: '🧼 위생',
   price: '💰 가격',
   etc: '📝 기타'
 };

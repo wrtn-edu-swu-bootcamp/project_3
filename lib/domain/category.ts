@@ -7,9 +7,10 @@ import { CATEGORY_DISPLAY } from '@/lib/utils/constants';
  * 카테고리별 시드 키워드 딕셔너리
  */
 const CATEGORY_SEED_KEYWORDS: Record<Category, string[]> = {
-  packaging: ['포장', '용기', '뚜껑', '국물', '샜', '새요', '흘렀', '파손', '찌그러', '테이프', '비닐', '눌렸', '엎어', '봉지', '새'],
+  packaging: ['포장', '용기', '뚜껑', '샜', '새요', '흘렀', '파손', '찌그러', '테이프', '비닐', '눌렸', '엎어', '봉지', '새', '밀봉', '누수'],
+  hygiene: ['위생', '털', '이물질', '벌레', '머리카락', '곰팡이', '비닐', '비닐껍질', '플라스틱', '청결', '오염', '불결', '더러'],
   delivery: ['배달', '늦', '지연', '빠르', '느리', '기사', '알뜰배달', '한집배달', '배송', '도착', '시간'],
-  food: ['맛', '맵', '짜', '달', '신선', '양', '식었', '눅눅', '바삭', '맛있', '맛없', '신맛', '쓴맛'],
+  food: ['맛', '맵', '짜', '달', '신선', '양', '식었', '눅눅', '바삭', '신맛', '쓴맛', '떡', '치즈', '소스'],
   price: ['가격', '비싸', '저렴', '쿠폰', '할인', '가성비', '비싼', '싼', '비용'],
   etc: ['친절', '불친절', '서비스', '응대']
 };
@@ -17,12 +18,33 @@ const CATEGORY_SEED_KEYWORDS: Record<Category, string[]> = {
 /**
  * 스톱워드 (카테고리 맥락 무시하는 범용 표현)
  */
-const STOPWORDS = ['맛있어요', '좋아요', '감사합니다', '합니다', '해요', '되요', '같아요', '이에요', '네요'];
+const STOPWORDS = [
+  '맛있어요', '좋아요', '감사합니다', '합니다', '해요', '되요', '같아요', '이에요', '네요',
+  '맛있', '좋', '최고', '추천', '감사', '진짜', '너무', '완전', '그냥', '항상', '이번', '다음',
+  '정말', '역시', '언제나', '꼭', '매번', '또', '다시', '계속', '여전히'
+];
+
+/**
+ * 카테고리별 기본 키워드 (fallback용)
+ */
+const DEFAULT_KEYWORDS: Record<Category, string[]> = {
+  packaging: ['포장 상태', '용기'],
+  hygiene: ['위생', '청결'],
+  delivery: ['배달', '시간'],
+  food: ['음식', '맛'],
+  price: ['가격', '가성비'],
+  etc: ['서비스', '친절']
+};
 
 /**
  * 키워드 추출 (카테고리별 맥락 고려)
  */
 function extractKeywords(reviews: Review[], category: Category): string[] {
+  // 리뷰가 너무 적으면 기본값 반환
+  if (reviews.length < 2) {
+    return DEFAULT_KEYWORDS[category] || ['키워드', '분석중'];
+  }
+
   // 1. 긍/부정 비율 계산
   const positive = reviews.filter(r => r.sentiment === 'positive').length;
   const negative = reviews.filter(r => r.sentiment === 'negative').length;
@@ -33,6 +55,10 @@ function extractKeywords(reviews: Review[], category: Category): string[] {
     r.sentiment === (isNegativeDominant ? 'negative' : 'positive')
   );
 
+  if (targetReviews.length === 0) {
+    return DEFAULT_KEYWORDS[category] || ['키워드', '분석중'];
+  }
+
   // 3. 단어 빈도 집계 (스톱워드 제외)
   const wordCount: Record<string, number> = {};
   const seedKeywords = CATEGORY_SEED_KEYWORDS[category] || [];
@@ -42,29 +68,33 @@ function extractKeywords(reviews: Review[], category: Category): string[] {
     words.forEach(word => {
       // 스톱워드 필터링
       if (STOPWORDS.some(sw => word.includes(sw))) return;
+      // 너무 짧거나 긴 단어 제외
+      if (word.length < 2 || word.length > 6) return;
       wordCount[word] = (wordCount[word] || 0) + 1;
     });
   });
 
-  // 4. 시드 키워드 포함 단어 우선 정렬
+  // 4. 시드 키워드 포함 단어 우선 정렬 (가중치 부여)
   const sorted = Object.entries(wordCount)
     .sort((a, b) => {
-      // 시드 키워드 포함 여부로 1차 정렬
-      const aHasSeed = seedKeywords.some(s => a[0].includes(s)) ? 1 : 0;
-      const bHasSeed = seedKeywords.some(s => b[0].includes(s)) ? 1 : 0;
-      if (bHasSeed !== aHasSeed) return bHasSeed - aHasSeed;
-      // 빈도로 2차 정렬
-      return b[1] - a[1];
+      // 시드 키워드 포함 여부로 1차 정렬 (가중치 10배)
+      const aHasSeed = seedKeywords.some(s => a[0].includes(s));
+      const bHasSeed = seedKeywords.some(s => b[0].includes(s));
+      
+      const aScore = (aHasSeed ? 10 : 1) * a[1];
+      const bScore = (bHasSeed ? 10 : 1) * b[1];
+      
+      return bScore - aScore;
     })
     .slice(0, 4)
     .map(([word]) => word);
 
-  // 5. 최소 2개 보장 (시드 키워드 fallback)
-  if (sorted.length < 2 && seedKeywords.length >= 2) {
-    return seedKeywords.slice(0, 2);
+  // 5. 최소 2개 보장 (fallback)
+  if (sorted.length < 2) {
+    return DEFAULT_KEYWORDS[category] || ['키워드', '분석중'];
   }
   
-  return sorted.length >= 2 ? sorted : ['키워드', '분석중'];
+  return sorted;
 }
 
 /**
@@ -76,6 +106,7 @@ export function generateCategoryDetails(reviews: Review[]): CategoryDetail[] {
     food: [],
     delivery: [],
     packaging: [],
+    hygiene: [],
     price: [],
     etc: []
   };

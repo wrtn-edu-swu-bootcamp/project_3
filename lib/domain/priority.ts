@@ -11,6 +11,7 @@ function groupByCategory(reviews: Review[]): Record<Category, Review[]> {
     food: [],
     delivery: [],
     packaging: [],
+    hygiene: [],
     price: [],
     etc: []
   };
@@ -32,6 +33,7 @@ function generateIssueName(category: Category, priority: Priority): string {
       food: '음식 품질 우수',
       delivery: '배달 만족도 높음',
       packaging: '포장 상태 양호',
+      hygiene: '위생 관리 양호',
       price: '가격 만족도 높음',
       etc: '전반적으로 좋은 평가'
     };
@@ -43,6 +45,7 @@ function generateIssueName(category: Category, priority: Priority): string {
     food: '맛/신선도 불만',
     delivery: '배달 시간 지연',
     packaging: '포장 파손',
+    hygiene: '위생 문제 발견',
     price: '가격 불만',
     etc: '기타 불만'
   };
@@ -69,18 +72,18 @@ export function scorePriority(reviews: Review[]): Omit<ActionCard, 'action' | 'a
     const percentage = Math.round((negative / total) * 100);
     const positivePercentage = Math.round((positive / total) * 100);
 
-    // 우선순위 판단
+    // 우선순위 판단: 비율 OR 개수 기준
     let priority: Priority;
     let sentiment: '부정' | '긍정';
     let finalPercentage: number;
     let count: number;
 
-    if (percentage >= 30) {
+    if (percentage >= 30 || negative >= 3) {
       priority = 'urgent';
       sentiment = '부정';
       finalPercentage = percentage;
       count = negative;
-    } else if (percentage >= 15) {
+    } else if (percentage >= 15 || negative >= 2) {
       priority = 'consider';
       sentiment = '부정';
       finalPercentage = percentage;
