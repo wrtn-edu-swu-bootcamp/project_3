@@ -9,10 +9,28 @@ export default function StoresPage() {
   // Server Component에서 빌드 타임에 리포트 로드
   const reports = loadAllReports();
 
+  // 긴급 알림이 있는 가게만 필터링
+  const urgentReports = reports.filter(
+    report => report.priorities.urgent.length > 0
+  );
+
+  // 알림 데이터 생성
+  const notifications = urgentReports.map((report) => {
+    const firstIssue = report.priorities.urgent[0];
+    return {
+      id: report.storeId,
+      storeId: report.storeId,
+      title: `긴급: ${firstIssue?.issue || '확인 필요'}`,
+      storeName: report.storeName,
+      time: '방금 전',
+      type: 'urgent' as const
+    };
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50/30 via-gray-50/50 to-white">
       {/* 헤더 */}
-      <MainHeader />
+      <MainHeader notifications={notifications} />
 
       {/* 메인 컨텐츠 */}
       <main className="container mx-auto px-4 pt-32 pb-16 max-w-5xl">

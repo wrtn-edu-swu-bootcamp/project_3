@@ -6,31 +6,20 @@ import Link from 'next/link';
 
 interface Notification {
   id: string;
+  storeId: string;
   title: string;
   storeName?: string;
   time: string;
   type: 'info' | 'urgent';
 }
 
-const DEMO_NOTIFICATIONS: Notification[] = [
-  { 
-    id: '1', 
-    title: '긴급: 포장 파손 불만이 늘었어요', 
-    storeName: '달떡볶이 공릉점',
-    time: '방금 전', 
-    type: 'urgent' 
-  },
-  { 
-    id: '2', 
-    title: '리포트가 생성되었습니다', 
-    time: '10분 전', 
-    type: 'info' 
-  },
-];
+interface MainHeaderProps {
+  notifications?: Notification[];
+}
 
-export function MainHeader() {
+export function MainHeader({ notifications = [] }: MainHeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const hasUnreadNotifications = DEMO_NOTIFICATIONS.length > 0;
+  const hasUnreadNotifications = notifications.length > 0;
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-200">
@@ -82,54 +71,62 @@ export function MainHeader() {
                     <h3 className="font-bold text-gray-900">알림</h3>
                   </div>
                   <div className="max-h-96 overflow-y-auto p-1">
-                    {DEMO_NOTIFICATIONS.map((notif) => (
-                      <div 
-                        key={notif.id}
-                        className={`m-2 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
-                          notif.type === 'urgent'
-                            ? 'bg-red-50 border-red-200 hover:bg-red-100'
-                            : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
-                        }`}
-                      >
-                        <div className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-bold mb-1 ${
-                                notif.type === 'urgent' ? 'text-red-900' : 'text-blue-900'
-                              }`}>
-                                {notif.title}
-                              </p>
-                              {notif.storeName && (
-                                <p className="text-xs text-gray-600 mb-1">
-                                  {notif.storeName}
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center text-gray-500">
+                        <p className="text-sm">알림이 없어요</p>
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <Link
+                          key={notif.id}
+                          href={`/report/${notif.storeId}/`}
+                          onClick={() => setShowNotifications(false)}
+                          className={`block m-2 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                            notif.type === 'urgent'
+                              ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                              : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                          }`}
+                        >
+                          <div className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-bold mb-1 ${
+                                  notif.type === 'urgent' ? 'text-red-900' : 'text-blue-900'
+                                }`}>
+                                  {notif.title}
                                 </p>
-                              )}
-                              <p className="text-xs text-gray-500">
-                                {notif.time}
-                              </p>
-                            </div>
-                            <div className={`flex items-center gap-1 text-sm font-medium ${
-                              notif.type === 'urgent' ? 'text-red-600' : 'text-blue-600'
-                            }`}>
-                              <span>확인</span>
-                              <svg 
-                                className="w-4 h-4" 
-                                fill="none" 
-                                viewBox="0 0 24 24" 
-                                stroke="currentColor"
-                                strokeWidth={2.5}
-                              >
-                                <path 
-                                  strokeLinecap="round" 
-                                  strokeLinejoin="round" 
-                                  d="M9 5l7 7-7 7" 
-                                />
-                              </svg>
+                                {notif.storeName && (
+                                  <p className="text-xs text-gray-600 mb-1">
+                                    {notif.storeName}
+                                  </p>
+                                )}
+                                <p className="text-xs text-gray-500">
+                                  {notif.time}
+                                </p>
+                              </div>
+                              <div className={`flex items-center gap-1 text-sm font-medium ${
+                                notif.type === 'urgent' ? 'text-red-600' : 'text-blue-600'
+                              }`}>
+                                <span>확인</span>
+                                <svg 
+                                  className="w-4 h-4" 
+                                  fill="none" 
+                                  viewBox="0 0 24 24" 
+                                  stroke="currentColor"
+                                  strokeWidth={2.5}
+                                >
+                                  <path 
+                                    strokeLinecap="round" 
+                                    strokeLinejoin="round" 
+                                    d="M9 5l7 7-7 7" 
+                                  />
+                                </svg>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        </Link>
+                      ))
+                    )}
                   </div>
                 </div>
               </>
