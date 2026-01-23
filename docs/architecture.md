@@ -1,5 +1,7 @@
 # RE:ACTION 코드 아키텍처 문서
 
+> **버전**: 1.1  
+> **최종 수정**: 2026-01-22  
 > **작성일**: 2026-01-22  
 > **대상**: 개발팀  
 > **목표**: Next.js App Router + Static Export 기반 MVP 데모 사이트 구축  
@@ -7,9 +9,32 @@
 
 ---
 
+## 문서 업데이트 로그
+
+### v1.1 (2026-01-22)
+- **빌드 파이프라인 정리**: prebuild 중복 실행 제거, 표준 실행 커맨드 확정
+- **Static Export 프리뷰**: `next start` → `serve out` 방식으로 변경
+- **Next.js App Router 타입 표준화**: params 타입 통일, notFound() 처리 추가
+- **Tailwind v4 정합성**: globals.css 엔트리 방식 명확화
+- **generated/ 가드 로직**: dev 시작 시 자동 prebuild, loader 에러 처리 추가
+- **미구현 함수 정리**: TODO 목록으로 체계화
+- **반응형 토큰 일관성**: design-guide.md 토큰과 Container 통합
+- **실행 커맨드 3줄 추가**: 개발/빌드/프리뷰 표준화
+
+### v1.0 (2026-01-22)
+- 최초 작성
+
+---
+
 ## 문서 목적
 
 본 문서는 RE:ACTION 서비스의 코드 아키텍처를 정의하며, **개발자가 그대로 구현해도 삐끗하지 않도록** 제약사항, 결정사항, 근거를 명확히 기술합니다. 특히 Static Export 환경에서의 제약, 빌드 파이프라인, 반응형 전략을 아키텍처 수준에서 명시합니다.
+
+**v1.1 핵심 개선사항**:
+- prebuild 중복 실행 제거 → 일관된 빌드 흐름
+- Static Export 로컬 프리뷰 방식 명확화
+- generated/ 미존재 시 안전장치 추가
+- 실무 표준 코드 패턴 적용
 
 ---
 
@@ -151,27 +176,40 @@ export default nextConfig;
 
 ### 2.3 빌드 타임 데이터 생성 제약
 
-**Decision: 왜 prebuild 스크립트를 분리했는가?**
-- **리스크**: Next.js 빌드 중 임의로 파일 쓰기 시 빌드 실패 가능
-- **대안 1**: `getStaticProps()`에서 데이터 읽기 → Static Export에서 deprecated
-- **대안 2**: prebuild 단계에서 별도 스크립트로 JSON 생성 (권장)
-- **선택**: **prebuild 스크립트 분리**
+**Decision: prebuild 스크립트 분리 vs 통합**
+
+| 요소 | 옵션 A: 분리 | 옵션 B: 통합 (선택) |
+|------|-------------|-------------------|
+| **prebuild** | 별도 스크립트 | `build` 안에 포함 |
+| **build** | `next build`만 | `prebuild && next build` |
+| **Vercel Command** | `npm run prebuild && npm run build` | `npm run build` |
+| **장점** | 명시적 분리 | 단순, 중복 실행 방지 |
+| **단점** | 수동 2단계 실행 가능성 | prebuild가 build에 의존 |
+
+**선택 이유**: 
+- **옵션 B** 선택 → `build` 스크립트 안에 prebuild 포함
+- **리스크 방지**: 개발자가 `npm run build`만 실행해도 prebuild 자동 실행
+- **Vercel 단순화**: Build Command가 `npm run build`만으로 충분
+- **일관성**: dev/build 모두 prebuild 자동 실행
 
 ```json
-// package.json 스크립트
+// package.json 스크립트 (확정)
 {
   "scripts": {
-    "prebuild": "tsx scripts/generate-reports.ts",  // ✅ 빌드 전 JSON 생성
-    "build": "next build",  // ✅ JSON 읽어서 Static HTML 생성
-    "dev": "npm run prebuild && next dev --turbo"
+    "prebuild": "tsx scripts/generate-reports.ts",
+    "build": "npm run prebuild && next build",
+    "dev": "npm run prebuild && next dev --turbo",
+    "preview": "npm run build && npx serve out",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
   }
 }
 ```
 
 **프로세스**:
-1. `npm run prebuild` → `scripts/generate-reports.ts` 실행 → `generated/reports/*.json` 생성
-2. `npm run build` → Next.js가 생성된 JSON 읽어 Static HTML 생성
-3. Vercel 배포 시: Build Command에 `npm run prebuild && npm run build` 설정
+1. `npm run build` → prebuild 자동 실행 → `generated/reports/*.json` 생성 → Next.js 빌드 → `out/` 생성
+2. `npm run dev` → prebuild 자동 실행 → dev 서버 시작
+3. `npm run preview` → 빌드 후 정적 서버로 `out/` 프리뷰
 
 ---
 
@@ -224,7 +262,7 @@ wrtn_ai_project/
 │   │
 │   └── utils/                   # 유틸리티
 │       ├── date.ts              # 날짜 포맷팅
-│       └── constants.ts         # 상수 (액션 뱅크 등)
+│       └── constants.ts         # 상수 (STORE_IDS, STORE_CONFIG 단일 소스)
 │
 ├── scripts/                      # 빌드 스크립트 (prebuild)
 │   └── generate-reports.ts      # Excel → JSON 생성 파이프라인
@@ -279,6 +317,60 @@ wrtn_ai_project/
 - **재사용성**: 다른 데이터 소스(API, DB)로 교체 시에도 domain 로직 유지
 - **명확한 책임**: parser는 "읽기만", classifier는 "분류만"
 
+### 3.3 generated/ 디렉토리 가드 로직
+
+**Decision: generated/ 미존재 시 안전장치**
+
+| 상황 | 문제 | 해결책 |
+|------|------|--------|
+| **dev 시작** | JSON 없어서 빌드 실패 | dev 스크립트에 prebuild 포함 |
+| **JSON 로드** | 파일 미존재 시 에러 | loader에서 명확한 안내 메시지 |
+| **storeId 관리** | generateStaticParams와 불일치 | constants.ts로 단일 소스 관리 |
+
+**구현 규칙**:
+
+1. **dev 스크립트 자동 prebuild** (package.json)
+```json
+{
+  "scripts": {
+    "dev": "npm run prebuild && next dev --turbo"
+  }
+}
+```
+
+2. **loader 에러 처리** (lib/data/loader.ts)
+```typescript
+export function loadReport(storeId: string): WeeklyReport {
+  const filePath = path.join(process.cwd(), 'generated', 'reports', `${storeId}.json`);
+  
+  if (!fs.existsSync(filePath)) {
+    throw new Error(
+      `❌ 리포트 파일을 찾을 수 없습니다: ${storeId}.json\n` +
+      `💡 해결 방법: npm run prebuild를 먼저 실행하세요.`
+    );
+  }
+  
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return JSON.parse(content);
+}
+```
+
+3. **단일 소스 상수** (lib/utils/constants.ts)
+```typescript
+// STORE_IDS를 scripts/generate-reports.ts와 generateStaticParams()에서 공유
+export const STORE_IDS = ['store-1', 'store-2', 'store-3'] as const;
+export const STORE_CONFIG = [
+  { id: 'store-1', name: '달떡볶이 공릉점', file: '달떡볶이_공릉점.xlsx' },
+  { id: 'store-2', name: '처갓집양념치킨 공릉점', file: '처갓집양념치킨_공릉점.xlsx' },
+  { id: 'store-3', name: '춘리마라탕 묵동점', file: '춘리마라탕_묵동점.xlsx' }
+] as const;
+```
+
+**효과**:
+- dev 시작 시 자동으로 prebuild 실행 → JSON 생성
+- loader 에러 메시지로 문제 해결 방법 명확히 안내
+- storeId 추가/삭제 시 constants.ts만 수정
+
 ---
 
 ## 4. 빌드 파이프라인
@@ -299,25 +391,22 @@ graph LR
 
 ### 4.2 prebuild 스크립트 (`scripts/generate-reports.ts`)
 
+**핵심 파이프라인 (복붙 가능한 최소 예시)**:
+
 ```typescript
 // scripts/generate-reports.ts
 import * as fs from 'fs';
 import * as path from 'path';
+import { STORE_CONFIG } from '../lib/utils/constants';
 import { parseExcel } from '../lib/data/parser';
 import { classifyCategory } from '../lib/domain/classifier';
 import { analyzeSentiment } from '../lib/domain/sentiment';
 import { scorePriority } from '../lib/domain/priority';
 import { matchActions } from '../lib/domain/actions';
-import type { WeeklyReport } from '../lib/types/report';
-
-const STORE_CONFIG = [
-  { id: 'store-1', name: '달떡볶이 공릉점', file: '달떡볶이_공릉점.xlsx' },
-  { id: 'store-2', name: '처갓집양념치킨 공릉점', file: '처갓집양념치킨_공릉점.xlsx' },
-  { id: 'store-3', name: '춘리마라탕 묵동점', file: '춘리마라탕_묵동점.xlsx' }
-];
+import type { WeeklyReport, Review } from '../lib/types/report';
 
 async function generateReports() {
-  // 1. generated/reports 디렉토리 생성
+  // 1. 출력 디렉토리 생성
   const outputDir = path.join(process.cwd(), 'generated', 'reports');
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -330,8 +419,8 @@ async function generateReports() {
     // 2.1 Excel 파싱
     const rawReviews = parseExcel(filePath);
     
-    // 2.2 Domain 로직 실행
-    const reviews = rawReviews.map(raw => ({
+    // 2.2 Domain 로직 실행 (카테고리 분류 + 감성 분석)
+    const reviews: Review[] = rawReviews.map(raw => ({
       ...raw,
       category: classifyCategory(raw.content),
       sentiment: analyzeSentiment(raw.content, raw.rating)
@@ -346,16 +435,20 @@ async function generateReports() {
       actions: matchActions(priority.issue)
     }));
     
-    // 2.5 리포트 생성
+    // 2.5 리포트 조합 (TODO 함수들 참고)
     const report: WeeklyReport = {
       storeId: store.id,
       storeName: store.name,
       period: { start: '2026-01-12', end: '2026-01-18' },
       totalReviews: reviews.length,
-      summary: generateSummary(priorities),
-      priorities: groupByPriority(actionCards),
-      categoryDetails: generateCategoryDetails(reviews),
-      badges: generateBadges(reviews)
+      summary: '배달 시간 지연이 심각해요',  // TODO: generateSummary()
+      priorities: {
+        urgent: actionCards.filter(c => c.priority === 'urgent'),
+        consider: actionCards.filter(c => c.priority === 'consider'),
+        good: actionCards.filter(c => c.priority === 'good')
+      },
+      categoryDetails: [],  // TODO: generateCategoryDetails()
+      badges: []  // TODO: generateBadges()
     };
     
     // 2.6 JSON 저장
@@ -368,7 +461,24 @@ async function generateReports() {
 generateReports().catch(console.error);
 ```
 
-### 4.3 빌드 명령
+**TODO: 미구현 함수 목록**
+
+| 파일 경로 | 함수 시그니처 | 설명 | 우선순위 |
+|----------|--------------|------|---------|
+| `lib/domain/priority.ts` | `groupByCategory(reviews: Review[]): Record<Category, Review[]>` | 카테고리별 리뷰 그룹화 | 높음 |
+| `lib/domain/priority.ts` | `generateIssueName(category: Category, items: Review[]): string` | 이슈명 생성 (예: "배달 시간 지연") | 높음 |
+| `lib/domain/summary.ts` | `generateSummary(priorities: PriorityScore[]): string` | 한 줄 요약 생성 | 중간 |
+| `lib/domain/category.ts` | `generateCategoryDetails(reviews: Review[]): CategoryDetail[]` | 카테고리 상세 생성 | 중간 |
+| `lib/domain/badges.ts` | `generateBadges(reviews: Review[]): Badge[]` | 배지 생성 (표본 부족 등) | 낮음 |
+
+**구현 순서**:
+1. `groupByCategory()` → 필수 (scorePriority에서 사용)
+2. `generateIssueName()` → 필수 (scorePriority에서 사용)
+3. `generateSummary()` → 중간 (리포트 상단 표시)
+4. `generateCategoryDetails()` → 중간 (Screen 2 하단)
+5. `generateBadges()` → 낮음 (신뢰도 표시)
+
+### 4.3 빌드 명령 (확정)
 
 ```json
 // package.json
@@ -377,20 +487,54 @@ generateReports().catch(console.error);
     "prebuild": "tsx scripts/generate-reports.ts",
     "build": "npm run prebuild && next build",
     "dev": "npm run prebuild && next dev --turbo",
-    "start": "next start",
+    "preview": "npm run build && npx serve out",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "22.0.0",
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "serve": "^14.0.0",
+    "tsx": "^4.0.0"
   }
 }
 ```
 
+**Decision: Static Export 로컬 프리뷰 방식**
+
+| 방식 | 명령 | 적합성 | 비고 |
+|------|------|--------|------|
+| `next start` | ❌ | Static Export 부적합 | SSR/서버 모드 전용 |
+| `serve out` | ✅ | 정적 서버 (권장) | HTML/CSS/JS만 서빙 |
+| `python -m http.server` | ✅ | 대안 | Python 설치 필요 |
+
+**선택**: `npx serve out` (Node.js 정적 서버)
+- **이유**: Static Export(`out/`)는 정적 파일만 존재, 서버 런타임 불필요
+- **장점**: 프로덕션 환경(Vercel CDN)과 동일한 방식
+- **설치**: `npm install -D serve`
+
+**표준 실행 커맨드 (팀 표준)**:
+```bash
+# 1. 개발 (dev 서버 + HMR)
+npm run dev
+
+# 2. 프로덕션 빌드 (Static Export → out/)
+npm run build
+
+# 3. 빌드 결과 로컬 프리뷰 (정적 서버)
+npm run preview
+```
+
 **로컬 개발 시**:
-1. `npm run dev` → prebuild 실행 후 dev 서버 시작
-2. Excel 수정 시 → 서버 재시작으로 JSON 재생성
+1. `npm run dev` → prebuild 자동 실행 → `generated/reports/*.json` 생성 → dev 서버 시작
+2. Excel 수정 시 → 서버 재시작 (`Ctrl+C` → `npm run dev`)
+3. 프리뷰 확인 → `npm run preview` (포트: http://localhost:3000)
 
 **Vercel 배포 시**:
-- Build Command: `npm run build` (prebuild 자동 실행)
+- Build Command: `npm run build` (prebuild 자동 포함)
 - Output Directory: `out`
+- Install Command: `npm install`
 
 ---
 
@@ -461,7 +605,7 @@ export function analyzeSentiment(content: string, rating: number): Sentiment {
 ```typescript
 // 우선순위 계산 (부정 비율 기반)
 export function scorePriority(reviews: Review[]): PriorityScore[] {
-  const grouped = groupByCategory(reviews);
+  const grouped = groupByCategory(reviews);  // TODO: 구현 필요
   
   return Object.entries(grouped).map(([category, items]) => {
     const total = items.length;
@@ -478,9 +622,21 @@ export function scorePriority(reviews: Review[]): PriorityScore[] {
       priority,
       percentage,
       count: negative,
-      issue: generateIssueName(category, items)
+      issue: generateIssueName(category, items)  // TODO: 구현 필요
     };
   });
+}
+
+// TODO: 구현 필요
+function groupByCategory(reviews: Review[]): Record<Category, Review[]> {
+  // 카테고리별 리뷰 그룹화 로직
+  return {} as any;
+}
+
+// TODO: 구현 필요
+function generateIssueName(category: Category, items: Review[]): string {
+  // 이슈명 생성 로직 (예: "배달 시간 지연")
+  return '이슈명 생성 필요';
 }
 ```
 
@@ -517,28 +673,50 @@ export function matchActions(issue: string): ActionItem[] {
 
 ### 6.2 동적 경로 정적 생성 (`generateStaticParams`)
 
+#### 단일 소스 상수 (lib/utils/constants.ts)
+
+```typescript
+// lib/utils/constants.ts
+export const STORE_IDS = ['store-1', 'store-2', 'store-3'] as const;
+export type StoreId = typeof STORE_IDS[number];  // 'store-1' | 'store-2' | 'store-3'
+
+export const STORE_CONFIG = [
+  { id: 'store-1', name: '달떡볶이 공릉점', file: '달떡볶이_공릉점.xlsx' },
+  { id: 'store-2', name: '처갓집양념치킨 공릉점', file: '처갓집양념치킨_공릉점.xlsx' },
+  { id: 'store-3', name: '춘리마라탕 묵동점', file: '춘리마라탕_묵동점.xlsx' }
+] as const;
+```
+
+#### Next.js App Router 페이지 (표준 패턴)
+
 ```typescript
 // app/report/[storeId]/page.tsx
+import { notFound } from 'next/navigation';
 import { loadReport } from '@/lib/data/loader';
+import { STORE_IDS } from '@/lib/utils/constants';
 import type { WeeklyReport } from '@/lib/types/report';
 
-// ✅ Static Export용 경로 생성
+// ✅ Static Export용 경로 생성 (단일 소스 사용)
 export async function generateStaticParams() {
-  return [
-    { storeId: 'store-1' },
-    { storeId: 'store-2' },
-    { storeId: 'store-3' }
-  ];
+  return STORE_IDS.map(storeId => ({ storeId }));
+}
+
+// ✅ 팀 표준 params 타입 (Next.js 15+)
+interface ReportPageProps {
+  params: Promise<{ storeId: string }>;
 }
 
 // ✅ Server Component (기본)
-export default async function ReportPage({
-  params
-}: {
-  params: Promise<{ storeId: string }>
-}) {
+export default async function ReportPage({ params }: ReportPageProps) {
   const { storeId } = await params;
-  const report: WeeklyReport = loadReport(storeId);  // generated/reports/store-1.json 읽기
+  
+  // 1. storeId 유효성 검증
+  if (!STORE_IDS.includes(storeId as any)) {
+    notFound();  // 404 페이지로 리다이렉트
+  }
+  
+  // 2. JSON 로드 (에러 처리는 loader에서)
+  const report: WeeklyReport = loadReport(storeId);
   
   return (
     <main>
@@ -549,10 +727,35 @@ export default async function ReportPage({
 }
 ```
 
+#### loader 에러 처리 (lib/data/loader.ts)
+
+```typescript
+// lib/data/loader.ts
+import * as fs from 'fs';
+import * as path from 'path';
+import type { WeeklyReport } from '@/lib/types/report';
+
+export function loadReport(storeId: string): WeeklyReport {
+  const filePath = path.join(process.cwd(), 'generated', 'reports', `${storeId}.json`);
+  
+  // 파일 미존재 시 명확한 에러 메시지
+  if (!fs.existsSync(filePath)) {
+    throw new Error(
+      `❌ 리포트 파일을 찾을 수 없습니다: ${storeId}.json\n` +
+      `💡 해결 방법: npm run prebuild를 먼저 실행하세요.`
+    );
+  }
+  
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return JSON.parse(content);
+}
+```
+
 **주의사항**:
-- `generateStaticParams()`는 빌드 타임에 실행 → 3개 경로(`store-1`, `store-2`, `store-3`)를 정적 생성
-- 동적 경로(`[storeId]`)이지만 Static Export로 HTML 생성
-- 4번째 가게 추가 시: `generateStaticParams()` 배열에 추가 필요
+- `generateStaticParams()`는 빌드 타임에 실행 → 3개 경로를 정적 생성
+- `STORE_IDS` 상수를 단일 소스로 사용 → `scripts/generate-reports.ts`와 동기화
+- `notFound()` 처리 → 잘못된 storeId 접근 시 404 페이지
+- loader 에러 처리 → `generated/` 미존재 시 안내 메시지
 
 ### 6.3 Server Component vs Client Component
 
@@ -597,7 +800,16 @@ export function AccordionTrigger() {
 - **배경**: design-guide.md의 모바일(360px)-태블릿(768px)-데스크톱(1024px) 규칙
 - **선택**: 전역 `Container` 컴포넌트로 max-width 일관성 보장
 
-### 7.2 Container 컴포넌트 (`components/ui/Container.tsx`)
+### 7.2 Container 컴포넌트 (design-guide.md 토큰 통합)
+
+**Decision: 토큰 기반 vs 하드코딩**
+
+| 방식 | 장점 | 단점 | 선택 |
+|------|------|------|------|
+| **하드코딩** (px-5, md:px-6) | Tailwind 직관적 | 토큰 변경 시 일괄 수정 불가 | ❌ |
+| **토큰 기반** (px-[var(--space-container-padding)]) | 디자인 토큰 일관성 | Tailwind 클래스 장황 | ✅ 권장 |
+
+**선택 이유**: design-guide.md의 `--space-container-padding`, `--container-*-max` 토큰과 일치
 
 ```tsx
 // components/ui/Container.tsx
@@ -613,17 +825,32 @@ export function Container({ children, className = '' }: ContainerProps) {
     <div className={`
       w-full
       mx-auto
-      px-5                    /* 모바일: 20px */
-      max-w-full              /* 모바일: 100% */
-      md:max-w-[640px]        /* 태블릿: 640px */
-      md:px-6                 /* 태블릿: 24px */
-      lg:max-w-[768px]        /* 데스크톱: 768px */
-      lg:px-8                 /* 데스크톱: 32px */
+      px-[var(--space-container-padding)]     /* 모바일: 20px */
+      max-w-[var(--container-mobile-max)]     /* 모바일: 100% */
+      md:px-[var(--space-l)]                  /* 태블릿: 24px */
+      md:max-w-[var(--container-tablet-max)]  /* 태블릿: 640px */
+      lg:px-[var(--space-xl)]                 /* 데스크톱: 32px */
+      lg:max-w-[var(--container-desktop-max)] /* 데스크톱: 768px */
       ${className}
     `}>
       {children}
     </div>
   );
+}
+```
+
+**globals.css 토큰 정의 (design-guide.md 동기화)**:
+```css
+:root {
+  /* Container */
+  --container-mobile-max: 100%;
+  --container-tablet-max: 640px;
+  --container-desktop-max: 768px;
+  
+  /* Spacing */
+  --space-container-padding: 20px;
+  --space-l: 24px;
+  --space-xl: 32px;
 }
 ```
 
@@ -660,15 +887,21 @@ export default function RootLayout({
 
 **Decision: CSS 변수 선언 → Tailwind에서 참조**
 
-#### `styles/globals.css` (토큰 선언)
+#### `styles/globals.css` (Tailwind v4 CSS-first 확정)
+
+**Decision: Tailwind v4 엔트리 방식 (공식 문서 기준)**
+
+Tailwind v4는 CSS-first 설정을 권장하며, `@tailwind` 지시어와 `@layer`를 조합합니다.
 
 ```css
 /* styles/globals.css */
+
+/* 1. Tailwind 엔트리 (v4 표준) */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Tailwind v4 CSS-first 설정 */
+/* 2. 디자인 토큰 (design-guide.md 동기화) */
 @layer base {
   :root {
     /* Typography Presets */
@@ -692,12 +925,18 @@ export default function RootLayout({
     --color-border-default: #E0E0E0;
     --color-border-focus: #4A90E2;
     
-    /* Spacing */
+    /* Spacing (design-guide.md 토큰) */
     --space-xs: 4px;
     --space-s: 8px;
     --space-m: 16px;
     --space-l: 24px;
     --space-xl: 32px;
+    --space-container-padding: 20px;
+    
+    /* Container (반응형) */
+    --container-mobile-max: 100%;
+    --container-tablet-max: 640px;
+    --container-desktop-max: 768px;
     
     /* Radius */
     --radius-card: 12px;
@@ -724,7 +963,7 @@ export default function RootLayout({
   }
 }
 
-/* Component Styles */
+/* 3. 컴포넌트 스타일 (재사용) */
 @layer components {
   .btn-primary {
     @apply px-6 py-3 bg-[var(--color-urgent)] text-white rounded-[var(--radius-button)];
@@ -737,6 +976,12 @@ export default function RootLayout({
   }
 }
 ```
+
+**v4 엔트리 규칙**:
+1. `@tailwind` 지시어는 최상단에 선언
+2. `@layer base`에서 CSS 변수 정의
+3. `@layer components`에서 재사용 클래스 정의
+4. Tailwind v3 문법(`@import`)은 사용하지 않음
 
 #### `tailwind.config.ts` (확장 포인트)
 
@@ -1215,6 +1460,34 @@ NODE_ENV=production
 
 ---
 
-**문서 버전**: 1.0  
+## 팀 표준 실행 커맨드 (3줄)
+
+```bash
+# 개발: prebuild 자동 실행 → dev 서버 시작 (HMR 지원)
+npm run dev
+
+# 빌드: prebuild 자동 실행 → Static Export (out/ 생성)
+npm run build
+
+# 프리뷰: 빌드 후 정적 서버로 out/ 프리뷰 (프로덕션 확인)
+npm run preview
+```
+
+**포트**:
+- dev: http://localhost:3000
+- preview: http://localhost:3000 (serve 기본 포트)
+
+**주의사항**:
+- Excel 수정 시: dev 서버 재시작 (`Ctrl+C` → `npm run dev`)
+- `npm run build` 실패 시: `generated/reports/*.json` 파일 생성 확인
+- `npm run preview` 404 에러: `out/` 디렉토리 존재 여부 확인
+
+---
+
+**문서 버전**: 1.1  
 **최종 수정**: 2026-01-22  
 **작성자**: 개발팀
+
+**변경 이력**:
+- v1.1: 빌드 파이프라인 정리, Static Export 프리뷰, params 타입 표준화, Tailwind v4 정합성, generated/ 가드 로직, TODO 정리
+- v1.0: 최초 작성
